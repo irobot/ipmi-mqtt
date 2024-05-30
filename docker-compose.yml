@@ -1,0 +1,8 @@
+services:
+  ipmiserv:
+    build: .
+    restart: unless-stopped
+    ports:
+      - 8448:3000
+    env_file:
+      - .env
