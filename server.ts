@@ -5,7 +5,7 @@ import {
   InterfaceType,
   InterfaceTypes,
   IpmiServerConfig,
-  getFanSpeed,
+  getFanSpeeds,
   setFanSpeedPercent,
 } from "./ipmi-util";
 import { Environment } from "./environment";
@@ -38,9 +38,16 @@ console.log(JSON.stringify({ ...config, user: "***", password: "***" }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+app.get("/fanspeed/all", async (req: Request, res: Response) => {
+  const allFans = await getFanSpeeds(config);
+  res.send(allFans);
+});
+
 app.get("/fanspeed/", async (req: Request, res: Response) => {
-  const { rpm, percent } = await getFanSpeed(config);
-  res.send({ fanspeed: rpm, fanSpeedPercent: percent });
+  const fans = await getFanSpeeds(config)
+  // Guaranteed to have at least one fan, so we can just use the first one.
+  const fan = fans.find((fan) => fan.id === 1) ?? fans[0]
+  res.send(fan);
 });
 
 app.post("/fanspeed/", async (req: Request, res: Response) => {

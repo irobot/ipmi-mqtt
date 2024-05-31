@@ -3,6 +3,12 @@
 This project is a simple Node.js application that uses [Express](https://expressjs.com/) to expose a REST API that allows you to control the fan speed of an IPMI-enabled server.
 To do that, it uses the [ipmi-tool](https://github.com/ipmitool/ipmitool) command line tool.
 
+# Motivation
+
+I needed a simple way to control the fan speed of my server through [Home Assistant](https://www.home-assistant.io/). To do that, I use [RESTful_command](https://www.home-assistant.io/integrations/rest_command) and an [Input number Helper](https://www.home-assistant.io/integrations/input_number/).
+
+![Home Assistant UI Panel](IpmiFans.png "Home Assistant UI Panel")
+
 # How do I use it?
 
 Send a POST request to `http://<server>:<port>/fanspeed` with a JSON body like this:
@@ -15,11 +21,12 @@ Alternatively, you could use a GET request and pass the speed as a query paramet
 http://<server>:<port>/fanspeed/50
 ```
 
-It is also possible to check the current fan speed by sending a GET request to `http://<server>:<port>/fanspeed`. The response will be of the form:
+It is also possible to check the current fan speed by sending a GET request to `http://<server>:<port>/fanspeed` or `http://<server>:<port>/fanspeed/all`. The response will be of the form:
 ```json
-{"fanspeed":4200,"fanSpeedPercent":16}
+{"id": 1, name: "Fan1", "rpm":4200,"percent":16}
 ```
-where `fanSpeedPercent` is the percentage of IPMI_MAX_FAN_SPEED that the fan speed was set to, and `fanspeed` is the actual RPM value.
+where `percent` is the percentage of IPMI_MAX_FAN_SPEED that the fan speed was set to, and `rpm` is the actual RPM value.
+`fanspeed/` will return the speed of Fan1, and `fanspeed/all` will return all fans.
 
 Note: When setting the fan speed, the fan speed for all fans is set to the same value as a percentage of IPMI_MAX_FAN_SPEED (see .env.example).
 
@@ -72,7 +79,7 @@ The following environment variables are required:
 
 * `IPMI_HOST`: The hostname or IP address of the server that you want to control.
 * `IPMI_USERNAME` and `IPMI_PASSWORD`: The username and password for the BMC (Baseboard Management Controller) on the server.
-* `IPMI_MAX_FAN_SPEED`: The maximum fan speed in RPMs, as reported by ipmitool. Default is 26250.
+* `IPMI_MAX_FAN_SPEED`: The maximum fan speed in RPMs, as reported by ipmitool. Default is 18740.
 
 The following environment variables are optional:
 * `PORT`: The port that the application should listen on. Default is 3000. If using a docker container, the actual port exposed on the host machine will be configured in `docker-compose.yml`.

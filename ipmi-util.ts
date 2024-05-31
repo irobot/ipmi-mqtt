@@ -29,33 +29,43 @@ export const sendCommand = async (
 };
 
 type FanSpeedResult = {
-  rpm: number;
-  percent: number;
+  id: number
+  rpm: number
+  percent: number
+  name: string
 };
 
-export const getFanSpeed = async (
+export const getFanSpeeds = async (
   config: IpmiServerConfig
-): Promise<FanSpeedResult> => {
-  const output = await sendCommand(`sdr type Fan`, config);
-  const lines = output.split("\n");
-  const fan1Line = lines.find((line) => line.includes("Fan1"));
+): Promise<FanSpeedResult[]> => {
+  const output = await sendCommand(`sdr type Fan`, config)
+  const lines = output.split("\n")
+
   /**
    * Use regex to parse the output of ipmitool sdr type Fan, which looks like this:
    * Fan1 RPM         | 30h | ok  |  7.1 | 4200 RPM
    */
-  const fan1Parsed = fan1Line?.match(/(\d+)\sRPM$/);
-
-  const fan1RPM = fan1Parsed ? parseInt(fan1Parsed[1], 10) : null;
-  if (fan1RPM === null || isNaN(fan1RPM)) {
+  const regex = /^(Fan(\d+))\s+RPM.*\|\s(\d+)\sRPM$/
+  // Remove lines that don't match the regex.
+  const fanLines = lines.filter((line) => regex.test(line))
+  if (fanLines.length === 0) {
     throw new Error(
       `Could not parse fan speed from ipmitool sdr type Fan output: ${output}`
     );
   }
 
-  const fan1SpeedPercent = Math.round((fan1RPM / config.maxFanSpeed) * 100);
-  console.log(fan1SpeedPercent);
-  return { rpm: fan1RPM, percent: fan1SpeedPercent };
-};
+  const fanSpeeds = fanLines.map((line) => {
+    // match is never undefined due to the filter above.
+    const match = line.match(regex)!
+    const name = match[1]
+    const id = parseInt(match[2], 10);
+    const rpm = parseInt(match[3], 10)
+    const percent = Math.round((rpm / config.maxFanSpeed) * 100);
+    return { id, name, rpm, percent }
+  })
+
+  return fanSpeeds
+}
 
 export const setFanSpeedPercent = async (
   speedPercent: number,
