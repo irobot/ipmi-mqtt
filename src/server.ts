@@ -6,6 +6,7 @@ import {
   InterfaceTypes,
   IpmiServerConfig,
   getFanSpeeds,
+  getTemperatures,
   setFanSpeedPercent,
 } from "./ipmi-util";
 import { Environment } from "./environment";
@@ -38,10 +39,13 @@ console.log(JSON.stringify({ ...config, user: "***", password: "***" }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-app.get("/fanspeed/all", async (req: Request, res: Response) => {
-  const allFans = await getFanSpeeds(config);
-  res.send(allFans);
-});
+app.get("/fanspeed/all", async (req: Request, res: Response) =>
+  res.send(await getFanSpeeds(config))
+)
+
+app.get("/temperature/all", async (req: Request, res: Response) =>
+  res.send(await getTemperatures(config))
+)
 
 app.get("/fanspeed/", async (req: Request, res: Response) => {
   const fans = await getFanSpeeds(config)
