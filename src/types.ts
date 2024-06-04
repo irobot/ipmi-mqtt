@@ -1,13 +1,16 @@
-export type TemperatureResult = {
-  id: number
-  /** Temperature in degrees Celsius */
-  temperature: number
-  name: string
+export type DeviceInfo = {
+  manufacturer: string
+  productName: string
+  serialNumber: string
 }
 
-export type FanSpeedResult = {
+export type Entity = {
   id: number
-  rpm: number
-  percent: number
   name: string
+  kind: 'temperature' | 'fanspeed'
+}
+
+export type DeviceData = {
+  deviceInfo: DeviceInfo
+  entities: Entity[]
 }
