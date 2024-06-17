@@ -1,15 +1,15 @@
-import express, { Express } from "express"
-import { Environment } from "../environment"
-import { IpmiServerConfig } from "../ipmi/types"
-import { registerHandlers, registerMqttHandlers } from "./handlers"
-import { MqttClient } from "mqtt/*"
-import { DeviceData } from "../types"
+import type { Environment } from "@/environment"
+import { registerHttpHandlers, registerMqttHandlers } from "@/http/handlers"
+import type { IpmiServerConfig } from "@/ipmi/types"
+import type { DeviceData } from "@/types"
+import express, { type Express } from "express"
+import { MqttClient } from "mqtt"
 
 export const startHttpServer = (
   env: Environment,
   config: IpmiServerConfig,
   deviceData: DeviceData,
-  mqttClient: MqttClient | undefined,
+  mqttClient: MqttClient | undefined
 ) => {
   const app: Express = express()
   const port = env.PORT
@@ -18,7 +18,7 @@ export const startHttpServer = (
   app.use(express.json())
   app.use(express.urlencoded({ extended: true }))
 
-  registerHandlers(app, config)
+  registerHttpHandlers(app, config)
 
   if (mqttClient) {
     registerMqttHandlers(app, mqttClient, deviceData)

@@ -1,24 +1,25 @@
-import { MqttClient } from "mqtt/*"
-import { getAllSensors, makeDiscoveryEndpoint } from "./client"
-import { MqttDevice } from "./types"
+import { makeDiscoveryEndpoint } from "@/mqtt/client"
+import type { MqttDevice } from "@/mqtt/types"
+import { MqttClient } from "mqtt"
 
 export const doHassDiscovery = (
   mqttClient: MqttClient,
   mqttDevice: MqttDevice
 ): string | undefined => {
-  const allSensors = getAllSensors(mqttDevice)
-  if (allSensors.length === 0) {
+  if (mqttDevice.components.length === 0) {
     return "No sensors"
   }
 
   const { device } = mqttDevice
 
-  for (const sensor of allSensors) {
+  for (const mqttEntity of mqttDevice.components) {
     const discoveryPayload = {
-      ...sensor,
+      ...mqttEntity,
       device,
     }
-    const discoveryEndpoint = makeDiscoveryEndpoint(sensor)
+    const discoveryEndpoint = makeDiscoveryEndpoint(mqttEntity)
+    console.log(discoveryEndpoint)
+    console.log(JSON.stringify(discoveryPayload))
     mqttClient.publish(discoveryEndpoint, JSON.stringify(discoveryPayload), {
       retain: true,
     })
@@ -30,9 +31,8 @@ export const undoHassDiscovery = (
   mqttClient: MqttClient,
   mqttDevice: MqttDevice
 ): void => {
-  const allSensors = getAllSensors(mqttDevice)
-  for (const sensor of allSensors) {
-    const topic = makeDiscoveryEndpoint(sensor)
+  for (const mqttEntity of mqttDevice.components) {
+    const topic = makeDiscoveryEndpoint(mqttEntity)
     mqttClient.publish(topic, "", { retain: true })
   }
 }

@@ -10,7 +10,7 @@ RUN pnpm i --frozen-lockfile
 RUN pnpm run build
 
 FROM node:22-alpine3.20 AS base
-RUN apk add --no-cache ipmitool
+RUN apk add --no-cache ipmitool=1.8.19-r1
 
 FROM base AS modules
 RUN npm install -g pnpm@8.6.2
@@ -22,4 +22,4 @@ FROM base as final
 WORKDIR /srv
 COPY --from=modules /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./
-CMD ["node", "server.js"]
+CMD ["node", "server.mjs"]

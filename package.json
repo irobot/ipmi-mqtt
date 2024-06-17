@@ -2,16 +2,29 @@
   "name": "ipmi-command",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "type": "module",
+  "main": "server.js",
   "scripts": {
-    "build": "tsc",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "lint": "tsc",
+    "build": "esbuild src/server.ts --bundle --platform=node --outfile=dist/server.mjs --format=esm --target=node10.4 --packages=external",
+    "start": "node dist/server.js",
+    "dev:tsc": "tsc --watch --preserveWatchOutput",
+    "dev:node": "node --watch dist/server.js",
+    "dev:esbuild": "pnpm run build --watch",
+    "dev": "run-p dev:*",
+    "test": "jest --watch --detectOpenHandles --coverage"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
     "@types/express": "^4.17.21",
+    "@types/jest": "^29.5.12",
+    "@types/node": "^20.14.2",
+    "esbuild": "^0.21.5",
+    "jest": "^29.7.0",
+    "npm-run-all": "^4.1.5",
+    "ts-jest": "^29.1.4",
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.4.5"

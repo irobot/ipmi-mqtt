@@ -1,104 +1,35 @@
-import { exec } from "child_process"
-import { FanSpeedResult, IpmiServerConfig, TemperatureResult } from "./types"
-import { DeviceData, DeviceInfo } from "../types"
-import { formatDeviceInfo, formatSensorInfo } from "../lib/pretty-print"
+import { formatDeviceInfo, formatSensorInfo } from "@/lib/pretty-print"
+import type { DeviceData, DeviceInfo, EntityComponent } from "@/types"
+import { getChassisSensors } from "./chassis/chassis-sensors"
+import { getFanSpeeds, getThirdPartyCardsFanOverride } from "./fan/fan-sensors"
+import { execAsync } from "./node-util"
+import { getTemperatures } from "./temperature/temperature-sensors"
+import type {
+  CollectDeviceDataTemplateType,
+  IpmiServerConfig,
+  IpmiToolConfig,
+} from "./types"
+
+export const formatCommand = (command: string, config: IpmiToolConfig) =>
+  `ipmitool -I ${config.interface} -H ${config.host} -U ${config.user} -P ${config.password} ${command}`
 
 export const sendCommand = async (
   command: string,
-  config: IpmiServerConfig
+  config: IpmiToolConfig
 ): Promise<string> => {
-  const cmd = `ipmitool -I ${config.interface} -H ${config.host} -U ${config.user} -P ${config.password} ${command}`
-  return await new Promise((resolve, reject) =>
-    exec(cmd, (err, stdout) => {
-      if (err) {
-        console.error(`Error sending ipmi command ${command}`, err)
-        reject(err)
-      } else {
-        resolve(stdout || "ok")
-      }
-    })
-  )
+  const cmd = formatCommand(command, config)
+  const { stdout } = await execAsync(cmd)
+  return stdout || "ok"
 }
 
-export const getTemperatures = async (
-  config: IpmiServerConfig
-): Promise<TemperatureResult[]> => {
-  const output = await sendCommand(`sdr type Temp`, config)
-  const lines = output.split("\n")
-
-  /**
-   * Use regex to parse the output of ipmitool sdr type Fan, which looks like this:
-   * Inlet Temp       | 04h | ok  |  7.1 | 21 degrees C
-   * Exhaust Temp     | 01h | ok  |  7.1 | 38 degrees C
-   * Temp             | 0Eh | ok  |  3.1 | 45 degrees C
-   * Temp             | 0Fh | ok  |  3.2 | 50 degrees C
-   *
-   * Group 1: Inlet Temp - name
-   * Group 2: 04         - id (I assume this is the sensor port number, but I'm not sure)
-   * Group 3: 21         - temperature in Celsius
-   */
-  const regex = /^(.*)\s*\|\s([\dABCDEF]+)h\s.*\|\s(\d+)\sdegrees C$/
-  // Remove lines that don't match the regex.
-  const fanLines = lines.filter((line) => regex.test(line))
-  if (fanLines.length === 0) {
-    throw new Error(
-      `Could not parse fan speed from ipmitool sdr type Fan output: ${output}`
-    )
-  }
-
-  const temperatures = fanLines.map((line) => {
-    // match is never undefined due to the filter above.
-    const match = line.match(regex)!
-    const name = match[1].trim()
-    const id = parseInt(match[2], 16)
-    const temperature = parseInt(match[3], 10)
-    const kind = "temperature" as const
-    return { id, kind, name, temperature }
-  })
-
-  return temperatures
-}
-
-export const getFanSpeeds = async (
-  config: IpmiServerConfig
-): Promise<FanSpeedResult[]> => {
-  const output = await sendCommand(`sdr type Fan`, config)
-  const lines = output.split("\n")
-
-  /**
-   * Use regex to parse the output of ipmitool sdr type Fan, which looks like this:
-   * Fan1 RPM         | 30h | ok  |  7.1 | 4200 RPM
-   *
-   * Group 1: Fan1 - name
-   * Group 2: 30   - id (I assume this is the sensor port number, but I'm not sure)
-   * Group 3: 4200 - rpm
-   */
-  const regex = /^(Fan\d+)\s+RPM\s*\|\s(\d+)h\s.*\|\s(\d+)\sRPM$/
-  // Remove lines that don't match the regex.
-  const fanLines = lines.filter((line) => regex.test(line))
-  if (fanLines.length === 0) {
-    throw new Error(
-      `Could not parse fan speed from ipmitool sdr type Fan output: ${output}`
-    )
-  }
-
-  const fanSpeeds = fanLines.map((line) => {
-    // match is never undefined due to the filter above.
-    const match = line.match(regex)!
-    const name = match[1]
-    const id = parseInt(match[2], 16)
-    const rpm = parseInt(match[3], 10)
-    const percent = Math.round((rpm / config.maxFanSpeed) * 100)
-    const kind = 'fanspeed' as const
-    return { id, name, kind, rpm, percent }
-  })
-
-  return fanSpeeds
+export const setAutoFanControl = async (config: IpmiToolConfig) => {
+  await sendCommand("raw 0x30 0x30 0x01 0x01", config)
+  console.log(`Set automatic fan speed control`)
 }
 
 export const setFanSpeedPercent = async (
   speedPercent: number,
-  config: IpmiServerConfig
+  config: IpmiToolConfig
 ) => {
   if (isNaN(speedPercent) || speedPercent < 0 || speedPercent > 100) {
     const err = `speedPercent out of range [0,100]. Got ${speedPercent}`
@@ -112,14 +43,10 @@ export const setFanSpeedPercent = async (
   console.log(`Set fan speed to ${speedPercent}%`)
 }
 
-/**
- * Collect information about the device, including the manufacturer and model. 
- */
-export const getDeviceInfo = async (
-  config: IpmiServerConfig,
+export const parseDeviceInfo = (
+  output: string,
   deviceNameOverride?: string | undefined
-): Promise<DeviceInfo> => {
-  const output = await sendCommand("fru print", config)
+): Omit<DeviceInfo, "deviceUrl"> => {
   const sections = output.split("\n\n")
   const mainSection = sections.find((section) => section.includes("(ID 0)"))
   if (!mainSection) {
@@ -127,11 +54,15 @@ export const getDeviceInfo = async (
       `Could not find device info in ipmitool fru print output: ${output}`
     )
   }
-  const lines = mainSection.split("\n")
+  const lines = mainSection.trimStart().split("\n")
   const kv = lines
     .map((line) => line.split(":"))
     .reduce((acc: Record<string, string>, [key, value]) => {
-      acc[key.trim()] = value.trim()
+      const k = key?.trim()
+      const v = value?.trim()
+      if (k && v) {
+        acc[k] = v
+      }
       return acc
     }, {})
 
@@ -145,38 +76,91 @@ export const getDeviceInfo = async (
     )
   }
 
-  const info = {
+  return {
     manufacturer,
     serialNumber,
     productName,
   }
-
-  return info
 }
+
+/**
+ * Collect information about the device, including the manufacturer and model.
+ */
+export const getDeviceInfo = async (
+  config: IpmiToolConfig,
+  deviceNameOverride?: string | undefined
+): Promise<DeviceInfo> => {
+  const output = await sendCommand("fru print", config)
+  const info = parseDeviceInfo(output, deviceNameOverride)
+  const isDell = info.manufacturer.toUpperCase() === "DELL"
+  const deviceUrl = isDell
+    ? (await sendCommand("mc getsysinfo delloem_url", config)) ?? ""
+    : ""
+
+  return { ...info, deviceUrl }
+}
+
+/**
+ * Controllable fan entity.
+ * Represents the command to set the speed (%) of all fans simultaneously.
+ * */
+const AllFansSpeedPercentageControl: EntityComponent[] = [
+  {
+    entity: { id: 959, name: "All Fans" },
+    role: "controllable",
+    kind: "fan",
+  },
+]
+
+const ThirdPartyCardsFanOverrideWarning =
+  `The third party cards fan override is enabled.\n` +
+  `Setting fan speed control to Automatic will cause the fan speed to be set 100%\n` +
+  `Consider disabling the third party cards fan override if you are using a Dell\n` +
+  `server with third party PCIe cards.\n\n` +
+  `To disable the third party cards fan override run:\n\n` +
+  `ipmitool raw 0x30 0xce 0x00 0x16 0x05 0x00 0x00 0x00 0x05 0x00 0x01 0x00 0x00\n`
+
+const CollectDeviceDataTemplate: CollectDeviceDataTemplateType = [
+  [getDeviceInfo, formatDeviceInfo, "\nGetting device info..."],
+  [getThirdPartyCardsFanOverride, undefined, ThirdPartyCardsFanOverrideWarning],
+  [getTemperatures, formatSensorInfo, "Getting temperature sensors..."],
+  [getFanSpeeds, formatSensorInfo, "\nGetting fan sensors..."],
+  [getChassisSensors, formatSensorInfo, "\n\nGetting chassis sensors..."],
+] as const
 
 /**
  *  Collect general information about the device, and available sensors
  */
 export const collectDeviceData = async (
   config: IpmiServerConfig,
-  deviceNameOverride?: string | undefined
+  deviceNameOverride?: string | undefined,
+  deviceDataTemplate = CollectDeviceDataTemplate
 ): Promise<DeviceData> => {
+  const [deviceTemplate, checkOverride, ...sensorTemplate] = deviceDataTemplate
 
-  console.log("\nGetting device info...")
-  const deviceInfo = await getDeviceInfo(config, deviceNameOverride)
-  console.log(formatDeviceInfo(deviceInfo))
+  const [collector, formatter, message] = deviceTemplate
+  console.log(message)
+  const deviceInfo = await collector(config, deviceNameOverride)
+  console.log(formatter(deviceInfo))
 
-  console.log("Getting temperature sensors...")
-  const temperatures = await getTemperatures(config)
-  temperatures.forEach((info) => console.log(formatSensorInfo(info)))
+  const components: EntityComponent[] = []
+  for (const [collector, formatter, message] of sensorTemplate) {
+    console.log(message)
+    const sensors = await collector(config)
+    console.log(formatter(sensors))
+    components.push(...sensors)
+  }
 
-  console.log("\nGetting fan sensors...")
-  const fans = await getFanSpeeds(config)
-  fans.forEach((info) => console.log(formatSensorInfo(info)))
-  console.log()
+  if (deviceInfo.manufacturer.toUpperCase() === "DELL") {
+    const [collector, _formatter, message] = checkOverride
+    const thirdPartyCardsFanOverride = await collector(config)
+    if (thirdPartyCardsFanOverride === "enabled") {
+      console.warn(message)
+    }
+  }
 
   return {
     deviceInfo,
-    entities: [...temperatures,...fans]
+    components: [...components, ...AllFansSpeedPercentageControl],
   }
 }

@@ -1,16 +1,24 @@
-import { Express, Response } from "express"
+import {
+  disableThirdPartyCardsFanOverride,
+  restoreThirdPartyCardsFanOverride,
+} from "@/ipmi/fan/fan-commands"
+import {
+  getFanSpeeds,
+  getThirdPartyCardsFanOverride,
+} from "@/ipmi/fan/fan-sensors"
 import {
   getDeviceInfo,
-  getFanSpeeds,
-  getTemperatures,
+  setAutoFanControl,
   setFanSpeedPercent,
-} from "../ipmi/ipmi-util"
-import { SetFanSpeed as SetFanSpeedPayload } from "./api"
-import { IpmiServerConfig } from "../ipmi/types"
+} from "@/ipmi/ipmi-util"
+import { getTemperatures } from "@/ipmi/temperature/temperature-sensors"
+import type { IpmiServerConfig } from "@/ipmi/types"
+import { makeMqttDeviceData } from "@/mqtt/client"
+import { doHassDiscovery, undoHassDiscovery } from "@/mqtt/discovery"
+import type { DeviceData } from "@/types"
+import type { Express, Response } from "express"
 import { MqttClient } from "mqtt"
-import { DeviceData } from "../types"
-import { makeMqttDeviceData } from "../mqtt/client"
-import { doHassDiscovery, undoHassDiscovery } from "../mqtt/discovery"
+import { SetFanSpeed as SetFanSpeedPayload } from "./api"
 
 function checkMqttConnected(
   mqttClient: MqttClient | undefined,
@@ -23,7 +31,7 @@ function checkMqttConnected(
   return true
 }
 
-export const registerHandlers = async (
+export const registerHttpHandlers = async (
   app: Express,
   config: IpmiServerConfig
 ) => {
@@ -38,11 +46,11 @@ export const registerHandlers = async (
   app.get("/fanspeed/", async (req, res) => {
     const fans = await getFanSpeeds(config)
     // Guaranteed to have at least one fan, so we can just use the first one.
-    const fan = fans.find((fan) => fan.id === 1) ?? fans[0]
+    const fan = fans.find((fan) => fan.entity.id === 1) ?? fans[0]
     res.send(fan)
   })
 
-  app.post("/fanspeed/", async (req, res) => {
+  app.post("/fanspeed/set", async (req, res) => {
     const payload = SetFanSpeedPayload.safeParse(req.body)
 
     if (!payload.success) {
@@ -67,7 +75,19 @@ export const registerHandlers = async (
     res.send("ok")
   })
 
-  app.get("/fanspeed/:speed", async (req, res) => {
+  app.get("/fanspeed/set/:speed", async (req, res) => {
+    if (req.params.speed === "auto") {
+      return setAutoFanControl(config)
+        .catch((err) => {
+          const errorMsg = "Error setting fan speed control to auto"
+          console.error(errorMsg, err)
+          res.status(400).send(errorMsg)
+        })
+        .then(() => {
+          res.send("ok")
+        })
+    }
+
     const speedPercent = parseInt(req.params.speed)
 
     if (speedPercent < 0 || speedPercent > 100) {
@@ -82,6 +102,29 @@ export const registerHandlers = async (
     })
 
     res.send("ok")
+  })
+
+  app.get("/dell/fan-control-override/", async (req, res) => {
+    const status = await getThirdPartyCardsFanOverride(config)
+    res.send(`Third party cards fan control override is ${status}`)
+  })
+
+  app.get("/dell/fan-control-override/:enable", async (req, res) => {
+    const { enable } = req.params
+    if (!["enable", "disable"].includes(enable)) {
+      res
+        .status(400)
+        .send(
+          `Invalid enable value: ${enable}. Valid values are "enable" or "disable"`
+        )
+      return
+    }
+    if (enable === "disable") {
+      await disableThirdPartyCardsFanOverride(config)
+    } else {
+      await restoreThirdPartyCardsFanOverride(config)
+    }
+    res.send(`Third party cards fan control override ${enable}d.`)
   })
 
   app.get("/device/info", async (_, res) => {

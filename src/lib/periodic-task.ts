@@ -1,4 +1,4 @@
-import { IpmiServerConfig } from "../ipmi/types";
+import type { IpmiServerConfig } from "@/ipmi/types"
 
 export const tick = (
   intervalMs: number,
@@ -10,7 +10,7 @@ export const tick = (
     return
   }
   setTimeout(async () => {
-    await task(config);
-    tick(intervalMs, config, task);
-  }, intervalMs);
-};
+    await task(config)
+    tick(intervalMs, config, task)
+  }, intervalMs)
+}
