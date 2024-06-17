@@ -1,7 +1,8 @@
 # What is this?
 
-This is a minimal wrapper around [ipmi-tool](https://github.com/ipmitool/ipmitool) that exposes fan speed sensors and control, temperature and power-on status from an IPMI-enabled server over MQTT and REST.
-If MQTT is enabled on Home Assistant, it can use auto-discovery to add the sensors and controls to Home Assistant automatically.
+A service that exposes fan speed sensors and controls, temperature readings and power-on status of an IPMI-enabled server over MQTT and REST.
+It uses the [ipmitool](https://github.com/ipmitool/ipmitool) CLI tool to communicate with a server's IPMI interface.
+If MQTT is enabled in Home Assistant, it can use auto-discovery to add the sensors and controls to Home Assistant automatically.
 
 # Motivation
 
@@ -81,7 +82,7 @@ Here's the full list of the currently supported endpoints:
 git clone https://github.com/irobot/ipmi-mqtt.git && cd ipmi-mqtt
 ```
 
-2. Copy .env.example to .env, edit the values in it and save it:
+2. Copy `.env.example` to `.env`, edit the values in it and save it:
 ```bash
   cp .env.example .env
   nano .env
