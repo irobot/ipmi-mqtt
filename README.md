@@ -53,7 +53,7 @@ http://<server>:<port>/fanspeed/set/50
 
 To check the current fan speed, send a GET request to `http://<server>:<port>/fanspeed` or `http://<server>:<port>/fanspeed/all`. The response will be of the form:
 ```json
-{"id": 1, name: "Fan1", "rpm":4200,"percent":16}
+{"id": 1, "name": "Fan1", "rpm":4200,"percent":16}
 ```
 where `percent` is the percentage of the maximum fan speed, and `rpm` is the actual RPM value.
 `fanspeed/` will return the speed of Fan1, and `fanspeed/all` will return all fans.
