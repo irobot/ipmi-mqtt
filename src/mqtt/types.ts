@@ -26,6 +26,7 @@ export type MqttSensor = MqttEntity & {
   state_topic: string
   value_template?: string
   unit_of_measurement?: string
+  state_class?: string
   options?: readonly string[]
 }
 
